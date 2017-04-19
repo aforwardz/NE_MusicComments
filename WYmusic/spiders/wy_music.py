@@ -1,3 +1,4 @@
+# coding: utf-8
 import os
 import scrapy
 import base64
@@ -15,8 +16,8 @@ class NEMusicSpider(scrapy.Spider):
     play_detail = 'http://music.163.com/api/playlist/detail?id={0]'
     comment_detail = 'http://music.163.com/weapi/v1/resource/comments/{0}?csrf_token='
     formdata = {
-        'params': 'I3XU4fuWrQrbJbuewnr4U9ZLNxLjcaWNP4pxlQ1neAPheiB59ejRj6iYfMtg9L9PgxKyiYrpxE4F1TcixETj/3Pgzr/REiKc/owLh4ZoiR4ir9lKYu7dgXLfT26b9v1gEi/z6C/bJhPxKRObBwBwQ0xnQaR7aj6CAfAdppRcTnWCi7ldGHWjoJulmPfa0FLdpH1xmZ/i61yZHAwKULTfO7V123jzmtAypYySLEwbzyA=',
-        'encSecKey': '4c12ccb3f09b8fba71a264c76874fb4e38322b271f55cd81e8732a8bf99d1d165ebfd4095f651d8bd1279a3c5d314f156b9257a04ba4f4ad3027a5a3952408646ea6da183f0f8bd342e8b42ebf31af4889932f76daeb26df07df9a40b33bb73019f8e9fa12d0aa5c0154bbe807cbfbb16ed121c82fb2a02dca13bb442b24d84e'
+        'params': 'y27+XjSXQIQnlyqqZN4u6CPIIGILaSRIEzBOnGHSPwskrSusVO4felPDPF03ZfF7WZnr6PWWOJgRjtDOSnuPEB5v5chySMpbQ0e2yaJbrDolEZdP1s9oRJJTCbdu/ZyAC+LPd7NrT1NQeDvl/nGAV9/ExS78qcgYZZYLqEB+KPC6Y2At+ot3apqCpTDcEL5ypJWi7OQh+jsOC3nRLbgFrtrCTQM/1tBGAy2bmMuJKwY=',
+        'encSecKey': 'dd3db45472a08c80d04f53ee62d4f04a7f80fbb1e383830bee6d3ea37fb5a39db207aa50c5be9e3dcb9b80ef7b55cf77a661f29115d2ae1a8d953d59fb02083cddb3198e9d5b18f4670aa29d1994f851794f17baae14ea9c0805f7ab35f91a58a38ed344a747cb495e731ab0feb5949f59962dd73af614198b9a11e97469bce4'
     }
     header = {
         'Referer': 'http://music.163.com/',
@@ -30,38 +31,47 @@ class NEMusicSpider(scrapy.Spider):
     nonce = '0CoJUm6Qyw8W8jud'
     pubKey = '010001'
 
+    user_header = {
+        'Referer': 'http://music.163.com/user/home?id=115179616',
+        'Cookie': 'appver=1.5.0.75771'
+    }
     text = {
         'uid': '115179616',
-        'type': '0'
+        'offset': '0'
     }
 
     def encrypt(self, text, secKey):
         cryptor = AES.new(secKey, 2, '0102030405060708')
-        text = text.encode('utf-8')
         pad = 16 - len(text) % 16
-        text = text + (b'0' * pad)
+        text = text + bytes(pad)
         ciphertext = cryptor.encrypt(text)
         ciphertext = base64.b64encode(ciphertext)
         return ciphertext
 
     def rsa_encrypt(self, text, pubKey, modulus):
         text = text[::-1]
-        rs = int(text.encode('hex'), 16)**int(pubKey, 16) % int(modulus, 16)
+        rs = int(''.join([hex(ord(c))[2:] for c in text]), 16)**int(pubKey, 16) % int(modulus, 16)
         return format(rs, 'x').zfill(256)
 
     def createSecretKey(self, size):
-        return os.urandom(size)
-        # return (''.join(map(lambda xx: (hex(ord(xx))[2:]), os.urandom(size))))[0:16]
+        return (''.join(map(lambda xx: (hex(xx)[2:]), os.urandom(size))))[0:16]
 
     def start_requests(self):
         text = {
             'uid': '115179616',
-            'type': '0'
+            'offset': '0',
+            'limit': '20',
+            'csrf_token': 'de095a228434c3da0a47c5a0ffa57d91'
         }
         text = json.dumps(text)
         secKey = self.createSecretKey(16)
-        encText = self.encrypt(text, secKey)
+        logging.info('The secure key is: %s' % secKey)
         encSecKey = self.rsa_encrypt(text, self.pubKey, self.modulus)
+        logging.info('The encrypted secure ket is: %s' % encSecKey)
+        text = text.encode('utf-8')
+        encText = self.encrypt(self.encrypt(text, self.nonce), secKey).decode('utf-8')
+        logging.info('The encrypted text is: %s' % encText)
+        print(len(encText), len(encSecKey))
         formdata = {
             'params': encText,
             'encSecKey': encSecKey
@@ -70,11 +80,12 @@ class NEMusicSpider(scrapy.Spider):
             yield scrapy.FormRequest(
                 url=url,
                 formdata=formdata,
-                headers=self.headers,
+                headers=self.user_header,
                 callback=self.parse
             )
 
     def parse(self, response):
+        """
         playlist = json.loads(response.text)['playlist']
         logging.info(playlist)
         for play in playlist.items():
@@ -83,6 +94,8 @@ class NEMusicSpider(scrapy.Spider):
                 url=self.play_detail.format(play_id),
                 callback=self.parse_play
             )
+        """
+        print(response.text)
 
     def parse_play(self, response):
         playinfo = json.loads(response.text)['result']
