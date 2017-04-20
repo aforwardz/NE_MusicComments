@@ -14,28 +14,27 @@ class NEMusicSpider(scrapy.Spider):
     start_urls = [
         'http://music.163.com/weapi/user/playlist?csrf_token='
     ]
+    user_record = 'http://music.163.com/weapi/v1/play/record?csrf_token='
     play_detail = 'http://music.163.com/api/playlist/detail?id={0}'
-    comment_detail = 'http://music.163.com/weapi/v1/resource/comments/{0}?csrf_token='
-    formdata = {
-        'params': 'y27+XjSXQIQnlyqqZN4u6CPIIGILaSRIEzBOnGHSPwskrSusVO4felPDPF03ZfF7WZnr6PWWOJgRjtDOSnuPEB5v5chySMpbQ0e2yaJbrDolEZdP1s9oRJJTCbdu/ZyAC+LPd7NrT1NQeDvl/nGAV9/ExS78qcgYZZYLqEB+KPC6Y2At+ot3apqCpTDcEL5ypJWi7OQh+jsOC3nRLbgFrtrCTQM/1tBGAy2bmMuJKwY=',
-        'encSecKey': 'dd3db45472a08c80d04f53ee62d4f04a7f80fbb1e383830bee6d3ea37fb5a39db207aa50c5be9e3dcb9b80ef7b55cf77a661f29115d2ae1a8d953d59fb02083cddb3198e9d5b18f4670aa29d1994f851794f17baae14ea9c0805f7ab35f91a58a38ed344a747cb495e731ab0feb5949f59962dd73af614198b9a11e97469bce4'
-    }
-    pw_formdata = {
-        'params': 'MHxjLo97184Az8NvJQjmnjwsr7bfwgDZKVNCFC4LrAQJDX9+/D20wzG3hfbd0pdx+NeFithe1jKfmBEnlUYpbIZcNxMMrLyrRl44ic1nNJCrYZuCJU4q+L89FrzHZ2UqfpHUvUegN6+7Ew6efIdtKIjTBrt5BC9k3BD5+bYfEjt23o6ekrTT8W+dt79a3Jb8JjXsUV5zglQNaRxOiyn/fCJa6U15ght8IiUdeDfBCn4=',
-        'encSecKey': '181aeff4e419a93abc2745678eff5b62f2711f69265accfbfe81affe7e6f3e024f691b1e64fae2a09051fd969cf66d79cc4cbde976a1a8108858a7b897ca2ca042ba102a61f8246cbfee36ceda6f1ba0af20ec35032b9d02c0c0c2f27b43781b28f216fd4c45c4cb644d56050c33dc52059406e4f47a4e56fad6df37deae4cb5'
-    }
-    headers = {
-        'Referer': 'http://music.163.com/',
-        'Cookie': 'appver=1.5.0.75771;'
-    }
+    comment_detail = 'http://music.163.com/weapi/v1/resource/comments/R_SO_4_{0}?csrf_token='
+
     modulus = '00e0b509f6259df8642dbc35662901477df22677ec152b5ff68ace615bb7b725152b3ab17a876aea8a5aa76d2e417629ec4ee341f56135fccf695280104e0312ecbda92557c93870114af6c9d05c4f7f0c3685b7a46bee255932575cce10b424d813cfe4875d3e82047b97ddef52741d546b8e289dc6935b3ece0462db0a22b8e7'
     nonce = '0CoJUm6Qyw8W8jud'
     pubKey = '010001'
 
-    user_header = {
-        'Referer': 'http://music.163.com/user/home?id=30725209',
-        'Cookie': 'appver=1.5.0.75771'
+    # header
+    header = {
+        'Referer': 'http://music.163.com/',
+        'Cookie': 'appver=1.5.0.75771;MUSIC_U=610b26c3be0b500a1a7000491af350e67479161dd6182f0b683865fb286441d9c959b8fe292055553e06215a23507ec0a70b41177f9edcea;',
     }
+
+    user_para = {
+        'uid': '',
+        'type': '0',
+        'params': 'eZMCYijT8paDO/VVaobvRprBwZdkmfGPDbX5d4DmDrs5ho4mmOtONLc81AcCOlU/59XkOYCYSt3rcbpkz8CMinOh4XhXiXsM8ZCdlCEmenm4HzbspZEE22cG7NZYGcGPCLTPb31dVOsmr56Yn7sMuyg9HhdZSL7vfv+aKjtfI93hm6Rxmms4LDfLh8qlNBuklK8BBa94MjYjgMZyLNGxrv9bqYI/7C0/GegiCdL0DM0=',
+        'encSecKey': '13eb37e2074f4b346fb9f9716c4c8a4e11b0cdb6c6f3f8bd64ee1c7ae27fdf8314bb3926eb5effe0f892e5f0270314b18f99a513db7e96deb01efccf3ec3844c2fbcf99687794d9e4a206b3ac4a75a82d2f7d5f0fbe342e03779b3ee13ecf5e7d28da073271c1e637b50b09851ae11f0c7d3ea84fd3eafd89db9818923c713ca'
+    }
+
     users_id = {
         'pw': '30725209',
         'ycw': '115179616'
@@ -43,6 +42,41 @@ class NEMusicSpider(scrapy.Spider):
     user_comments = {}
     limit = 1000
     offset = 0
+
+    # 获取params
+    def get_params(self, first_param, forth_param):
+        iv = "0102030405060708"
+        first_key = forth_param
+        second_key = 16 * 'F'
+        h_encText = self.AES_encrypt(first_param, first_key.encode(), iv.encode())
+        h_encText = self.AES_encrypt(h_encText.decode(), second_key.encode(), iv.encode())
+        return h_encText.decode()
+
+    # 获取encSecKey
+    def get_encSecKey(self):
+        encSecKey = "257348aecb5e556c066de214e531faadd1c55d814f9be95fd06d6bff9f4c7a41f831f6394d5a3fd2e3881736d94a02ca919d952872e7d0a50ebfa1769a7a62d512f5f1ca21aec60bc3819a9c3ffca5eca9a0dba6d6f7249b06f5965ecfff3695b54e1c28f3f624750ed39e7de08fc8493242e26dbc4484a01c76f739e135637c"
+        return encSecKey
+
+    # 解AES秘
+    def AES_encrypt(self, text, key, iv):
+        pad = 16 - len(text) % 16
+        text = text + pad * chr(pad)
+        encryptor = AES.new(key, AES.MODE_CBC, iv)
+        encrypt_text = encryptor.encrypt(text.encode())
+        encrypt_text = base64.b64encode(encrypt_text)
+        return encrypt_text
+
+    # 传入post数据
+    def crypt_api(self, offset, limit):
+        first_param = "{rid:\"\", offset:\"{0}\", total:\"true\", limit:\"{1}\", csrf_token:\"\"}".format(offset, limit)
+        forth_param = "0CoJUm6Qyw8W8jud"
+        params = self.get_params(first_param, forth_param)
+        encSecKey = self.get_encSecKey()
+        data = {
+            "params": params,
+            "encSecKey": encSecKey
+        }
+        return data
 
     def encrypt(self, text, secKey):
         cryptor = AES.new(secKey, 2, '0102030405060708')
@@ -62,8 +96,11 @@ class NEMusicSpider(scrapy.Spider):
 
     def paramsCreator(self, limit, offset):
         text = {
+            'rid': '',
             'limit': limit,
             'offset': offset,
+            'total': 'true',
+            'csrf_token': ''
         }
         text = json.dumps(text)
         secKey = self.createSecretKey(16)
@@ -81,16 +118,19 @@ class NEMusicSpider(scrapy.Spider):
         return params
 
     def start_requests(self):
-
+        # uid = input('Please input the id of the user you want to search: ')
+        uid = '115179616'
+        self.user_para['uid'] = uid
         for url in self.start_urls:
             yield scrapy.FormRequest(
-                url=url,
-                formdata=self.pw_formdata,
-                headers=self.user_header,
+                url=self.user_record,
+                formdata=self.user_para,
+                headers=self.header,
                 callback=self.parse
             )
 
     def parse(self, response):
+        """
         playlist = json.loads(response.text)['playlist']
         for play in playlist:
             if str(play['creator']['userId']) == self.users_id['pw']:
@@ -100,6 +140,21 @@ class NEMusicSpider(scrapy.Spider):
                     url=self.play_detail.format(play_id),
                     callback=self.parse_play
                 )
+        """
+        print(type(response.text))
+        record = json.dumps(response.text)
+        print(type(record))
+        all_record = record['allData']
+        week_record = record['weekData']
+        for song in all_record:
+            song_id = song['id']
+            comm_url = self.comment_detail.format(song_id)
+            para = self.crypt_api(0, 20)
+            yield scrapy.FormRequest(
+                url=comm_url,
+                formdata=para,
+                callback=self.parse_song
+            )
 
     def parse_play(self, response):
         playinfo = json.loads(response.text)['result']
@@ -112,7 +167,7 @@ class NEMusicSpider(scrapy.Spider):
             para = self.paramsCreator(1, 0)
             yield scrapy.FormRequest(
                 url=self.comment_detail.format(commThread_id),
-                headers=self.headers,
+                headers=self.header,
                 formdata=para,
                 callback=self.parse_song,
                 meta={'song_name': song['name'], 'thread_id': commThread_id}
@@ -120,7 +175,9 @@ class NEMusicSpider(scrapy.Spider):
 
     def parse_song(self, response):
         total_comments = json.dumps(response.text)['total']
+        print(total_comments)
 
+        """
         while self.offset < total_comments:
             time.sleep(2)
             logging.info(
@@ -131,7 +188,7 @@ class NEMusicSpider(scrapy.Spider):
             try:
                 yield scrapy.FormRequest(
                     url=self.comment_detail.format(response.meta.get('thread_id')),
-                    headers=self.headers,
+                    headers=self.header,
                     formdata=para,
                     callback=self.dumpdata
                 )
@@ -147,6 +204,7 @@ class NEMusicSpider(scrapy.Spider):
                 json.dump({response.meta.get('song_name'): self.user_comments}, c)
         self.user_comments = {}
         self.offset = 0
+    """
 
     def dumpdata(self, response):
         for comment in response['comments']:
