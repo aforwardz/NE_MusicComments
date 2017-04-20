@@ -68,7 +68,7 @@ class NEMusicSpider(scrapy.Spider):
 
     # 传入post数据
     def crypt_api(self, offset, limit):
-        first_param = "{rid:\"\", offset:\"{0}\", total:\"true\", limit:\"{1}\", csrf_token:\"\"}".format(offset, limit)
+        first_param = "{rid:\"\", offset:\"%s\", total:\"true\", limit:\"%s\", csrf_token:\"\"}" % (offset, limit)
         forth_param = "0CoJUm6Qyw8W8jud"
         params = self.get_params(first_param, forth_param)
         encSecKey = self.get_encSecKey()
@@ -119,8 +119,7 @@ class NEMusicSpider(scrapy.Spider):
 
     def start_requests(self):
         # uid = input('Please input the id of the user you want to search: ')
-        uid = '115179616'
-        self.user_para['uid'] = uid
+        self.user_para['uid'] = self.users_id['pw']
         for url in self.start_urls:
             yield scrapy.FormRequest(
                 url=self.user_record,
@@ -141,18 +140,17 @@ class NEMusicSpider(scrapy.Spider):
                     callback=self.parse_play
                 )
         """
-        print(type(response.text))
-        record = json.dumps(response.text)
-        print(type(record))
-        all_record = record['allData']
-        week_record = record['weekData']
-        for song in all_record:
-            song_id = song['id']
+        records = json.loads(response.text)
+        all_record = records['allData']
+        # week_record = record['weekData']
+        for record in all_record:
+            song_id = record['song']['id']
             comm_url = self.comment_detail.format(song_id)
             para = self.crypt_api(0, 20)
             yield scrapy.FormRequest(
                 url=comm_url,
                 formdata=para,
+                meta={'song_name': record['song']['name'], 'song_id': song_id},
                 callback=self.parse_song
             )
 
@@ -174,20 +172,19 @@ class NEMusicSpider(scrapy.Spider):
             )
 
     def parse_song(self, response):
-        total_comments = json.dumps(response.text)['total']
-        print(total_comments)
+        total_comments = json.loads(response.text)['total']
 
-        """
+
         while self.offset < total_comments:
             time.sleep(2)
             logging.info(
                 "正在查询歌曲: %s, 进度: %s/%s, 当前共找到评论: %d条" % (
                 response.meta.get('song_name'), self.offset, total_comments, len(self.user_comments)))
 
-            para = self.paramsCreator(self.limit, self.offset)
+            para = self.crypt_api(self.offset, self.limit)
             try:
                 yield scrapy.FormRequest(
-                    url=self.comment_detail.format(response.meta.get('thread_id')),
+                    url=self.comment_detail.format(response.meta.get('song_id')),
                     headers=self.header,
                     formdata=para,
                     callback=self.dumpdata
@@ -204,9 +201,10 @@ class NEMusicSpider(scrapy.Spider):
                 json.dump({response.meta.get('song_name'): self.user_comments}, c)
         self.user_comments = {}
         self.offset = 0
-    """
+
 
     def dumpdata(self, response):
-        for comment in response['comments']:
-            if comment['user']['userId'] == int(self.users_id['pw']):
+        comments = json.loads(response.text)['comments']
+        for comment in comments:
+            if comment['user']['userId'] == int(self.users_id['ycw']):
                 self.user_comments.update({comment['commentId']: comment['content']})
