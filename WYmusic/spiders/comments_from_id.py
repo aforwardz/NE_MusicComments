@@ -1,5 +1,4 @@
 # coding: utf-8
-import os
 import scrapy
 import base64
 import logging
@@ -28,6 +27,7 @@ class NEMusicSpider(scrapy.Spider):
         'Cookie': 'appver=1.5.0.75771;MUSIC_U=610b26c3be0b500a1a7000491af350e67479161dd6182f0b683865fb286441d9c959b8fe292055553e06215a23507ec0a70b41177f9edcea;',
     }
 
+    # 不同用户可以在network formdata里copy一份
     user_para = {
         'uid': '',
         'type': '0',
@@ -36,15 +36,15 @@ class NEMusicSpider(scrapy.Spider):
     }
 
     users_id = {
-        'pw': '30725209',
-        'ycw': '115179616'
+        'user_name': 'user_id'
     }
 
-    songs_id = ['25731497',] # '29023826']
+    songs_id = []
     user_comments = {}
-    limit = 1000
+    limit = 20  # 发现这里limit设置如果大于20，无论多少返回数据里只包含20条评论。。囧。。
     offset = 0
 
+    # 这套加密参考https://github.com/wenhaoliang/netease-music-spider
     # 获取params
     def get_params(self, first_param, forth_param):
         iv = "0102030405060708"
@@ -80,6 +80,8 @@ class NEMusicSpider(scrapy.Spider):
         }
         return data
 
+    """
+    # 这套加密有点小问题，后面研究改进
     def encrypt(self, text, secKey):
         cryptor = AES.new(secKey, 2, '0102030405060708')
         pad = 16 - len(text) % 16
@@ -119,6 +121,8 @@ class NEMusicSpider(scrapy.Spider):
 
         return params
 
+    """
+
     def start_requests(self):
         # uid = input('Please input the id of the user you want to search: ')
         self.user_para['uid'] = self.users_id['ycw']
@@ -131,17 +135,6 @@ class NEMusicSpider(scrapy.Spider):
             )
 
     def parse(self, response):
-        """
-        playlist = json.loads(response.text)['playlist']
-        for play in playlist:
-            if str(play['creator']['userId']) == self.users_id['pw']:
-                play_id = play['id']
-                logging.info('play list id is: %s' % play_id)
-                yield scrapy.Request(
-                    url=self.play_detail.format(play_id),
-                    callback=self.parse_play
-                )
-        """
         records = json.loads(response.text)
         all_record = records['allData']
         # week_record = record['weekData']
@@ -185,10 +178,9 @@ class NEMusicSpider(scrapy.Spider):
             para = self.crypt_api(self.offset, self.limit)
             logging.info(response.meta.get('song_id'))
             try:
-                scrapy.FormRequest(
+                yield scrapy.FormRequest(
                     url=self.comment_detail.format(response.meta.get('song_id')),
                     formdata=para,
-                    meta={'test': 'success'},
                     callback=self.dumpdata
                 )
             except:
@@ -199,13 +191,12 @@ class NEMusicSpider(scrapy.Spider):
 
         logging.info("本次查询完毕")
         if self.user_comments:
-            with open('pw_comment.json', 'w') as c:
+            with open('comment.txt', 'w') as c:
                 json.dump({response.meta.get('song_name'): self.user_comments}, c)
         self.user_comments = {}
         self.offset = 0
 
     def dumpdata(self, response):
-        logging.info(response.meta.get('test'))
         comments = json.loads(response.text)['comments']
         for comment in comments:
             logging.info('| %s : %s' % (comment['user']['nickname'], comment['content']))
