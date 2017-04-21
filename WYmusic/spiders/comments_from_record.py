@@ -8,17 +8,18 @@ from Crypto.Cipher import AES
 
 __author__ = 'https://github.com/IdiotYcw'
 # Description：
-# 输入用户id，及歌曲id，然后爬取每首歌下该用户的评论
+# 输入用户id，获取用户所有时间听歌的record，然后爬取每首歌下该用户的评论
 # 结果保存到文本
 
 
 class NEMusicSpider(scrapy.Spider):
-    name = 'NE_Comment'
+    name = 'NE_Record'
     allowed_domains = ['music.163.com']
     start_urls = [
-        'http://music.163.com/weapi/user/playlist?csrf_token='
+        'http://music.163.com/weapi/v1/play/record?csrf_token='
     ]
     user_record = 'http://music.163.com/weapi/v1/play/record?csrf_token='
+    user_playlist = 'http://music.163.com/weapi/user/playlist?csrf_token='
     play_detail = 'http://music.163.com/api/playlist/detail?id={0}'
     comment_detail = 'http://music.163.com/weapi/v1/resource/comments/R_SO_4_{0}?csrf_token='
 
@@ -32,7 +33,7 @@ class NEMusicSpider(scrapy.Spider):
         'Cookie': 'appver=1.5.0.75771;MUSIC_U=610b26c3be0b500a1a7000491af350e67479161dd6182f0b683865fb286441d9c959b8fe292055553e06215a23507ec0a70b41177f9edcea;',
     }
 
-    # 不同用户可以在network对应的api下的formdata里copy一份
+    # 不同用户可以在network formdata里copy一份
     user_para = {
         'uid': '',
         'type': '0',
@@ -40,6 +41,11 @@ class NEMusicSpider(scrapy.Spider):
         'encSecKey': '13eb37e2074f4b346fb9f9716c4c8a4e11b0cdb6c6f3f8bd64ee1c7ae27fdf8314bb3926eb5effe0f892e5f0270314b18f99a513db7e96deb01efccf3ec3844c2fbcf99687794d9e4a206b3ac4a75a82d2f7d5f0fbe342e03779b3ee13ecf5e7d28da073271c1e637b50b09851ae11f0c7d3ea84fd3eafd89db9818923c713ca'
     }
 
+    users_id = {
+        'user_name': 'user_id'
+    }
+
+    songs_id = []
     user_comments = {}
     limit = 20  # 发现这里limit设置如果大于20，无论多少返回数据里只包含20条评论。。囧。。
     offset = 0
@@ -125,24 +131,38 @@ class NEMusicSpider(scrapy.Spider):
 
     def start_requests(self):
         uid = input('目标用户Id: ')
-        songs_id = input('要查询的歌曲Id,由逗号隔开: ')
-        songs_id = songs_id.split(',')
-        for id in songs_id:
-            comm_url = self.comment_detail.format(id)
-            para = self.crypt_api(0, 20)
+        self.user_para['uid'] = uid
+        for url in self.start_urls:
             yield scrapy.FormRequest(
-                url=comm_url,
-                formdata=para,
-                meta={'user': uid, 'song_id': id},
+                url=url,
+                formdata=self.user_para,
+                headers=self.header,
+                meta={'user': uid},
                 callback=self.parse
             )
 
     def parse(self, response):
+        records = json.loads(response.text)
+        all_record = records['allData']
+        logging.info('该用户有前%s条听歌排行记录' % len(all_record))
+        # week_record = record['weekData']
+        for record in all_record:
+            song_id = record['song']['id']
+            comm_url = self.comment_detail.format(song_id)
+            para = self.crypt_api(0, 20)
+            yield scrapy.FormRequest(
+                url=comm_url,
+                formdata=para,
+                meta={'user': response.meta.get('user'), 'song_id': song_id},
+                callback=self.parse_song
+            )
+
+    def parse_song(self, response):
         total_comments = json.loads(response.text)['total']
         user_id = response.meta.get('user')
         song_id = response.meta.get('song_id')
 
-        logging.info('开始搜索评论咯...')
+        logging.info('开始搜索歌曲: %s' % song_id)
         while self.offset < total_comments:
             time.sleep(1)
 
@@ -155,26 +175,25 @@ class NEMusicSpider(scrapy.Spider):
                     callback=self.dumpdata
                 )
             except:
-                logging.info('网络异常,自动重试...')
+                logging.info('网络异常,自动重试..')
                 continue
 
             self.offset += self.limit
 
-        logging.info('本次查询完毕!')
+        logging.info("本次查询完毕")
         if self.user_comments:
-            with open('comment.txt', 'w') as c:
+            with open('comment_from_record.txt', 'w') as c:
                 json.dump({song_id: self.user_comments}, c, ensure_ascii=False)
         self.user_comments = {}
         self.offset = 0
 
     def dumpdata(self, response):
         logging.info(
-            '正在查询歌曲: %s, 进度: %s/%s, 当前共找到评论: %d条' % (
+            "正在查询歌曲: %s, 进度: %s/%s, 当前共找到评论: %d条" % (
                 response.meta.get('song_id'), response.meta.get('offset'),
                 response.meta.get('t_num'), len(self.user_comments)))
         comments = json.loads(response.text)['comments']
         for comment in comments:
             logging.info('| %s : %s' % (comment['user']['nickname'], comment['content']))
             if comment['user']['userId'] == int(response.meta.get('uid')):
-                logging.info('又找到1条评论辣！')
                 self.user_comments.update({comment['commentId']: comment['content']})
